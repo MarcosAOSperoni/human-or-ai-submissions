@@ -140,6 +140,66 @@ Synthetic tests (split logic, AUROC, result/prediction round-trips) always run. 
 2. `python -m src.data verify`
 3. Run each model's experiment script (to be added under `experiments/` by each owner) with the seed recorded in its metrics JSON.
 
+## DistilBERT (Marcos)
+
+Code: `src/classifiers/distilbert.py` (model), `experiments/distilbert_train.py` (one run),
+`experiments/distilbert_grid.py` (comparison), `experiments/distilbert_plots.py` (figures).
+
+**Model.** `distilbert-base-uncased` + 2-way sequence-classification head; truncation to 512 tokens with
+dynamic padding per batch; AdamW (weight decay 0.01, none on bias/LayerNorm), linear LR decay, no warmup,
+grad-norm clip 1.0; P(AI) = softmax(logits)[:, 1]. Device auto-selected (CUDA → MPS → CPU).
+
+**Seeds.** Split seed 42; training seed 42 (`set_seed` + seeded DataLoader shuffling). GPU/MPS kernels are
+not bit-for-bit deterministic, so reruns can differ in the last decimals.
+
+**Commands** (run from `submissions/team-10/` with the venv active):
+
+```bash
+# smoke test (~20 s): 64 balanced train + 64 val examples, short sequences
+python -m experiments.distilbert_train --limit 64 --max-length 128 --epochs 2
+
+# baseline: lr 2e-5, batch 16, 3 epochs, max length 512
+python -m experiments.distilbert_train
+
+# staged comparison (resumable; skips runs whose metrics JSON exists)
+python -m experiments.distilbert_grid
+
+# figures from recorded results
+python -m experiments.distilbert_plots
+
+# DistilBERT unit tests (tiny random model, CPU)
+pytest tests/test_distilbert.py
+```
+
+**Hyperparameter grid.** Instead of all 9 combinations: stage 1 compares learning rates 2e-5 / 3e-5 / 5e-5 at
+3 epochs; stage 2 tries 2 and 4 epochs at the stage-1 best learning rate (5 runs). Batch size 16 and max
+length 512 are fixed. Selection is by validation AUROC only; `test.csv` is never used.
+
+**Checkpoint selection.** Each run evaluates the validation set after every epoch and keeps the epoch with the
+best validation AUROC. The validation set is never used for gradient updates, but because it selects both
+the epoch and the hyperparameters, the reported validation AUROC of the chosen configuration is slightly
+optimistic.
+
+**Outputs.**
+
+| What | Where | In git? |
+|---|---|---|
+| Per-run metrics + per-epoch losses/AUROC | `results/metrics/distilbert_*.json` | yes |
+| Run summary (config, time, train/val AUROC) | `results/distilbert_experiments.csv` | yes |
+| Validation predictions (`id,label,prob_ai`) | `results/predictions/distilbert_*_val.csv` | no (regenerate) |
+| Figures | `results/figures/distilbert_*.png` | yes |
+| Best checkpoint per run (~260 MB each) | `checkpoints/distilbert/<run_name>/` | no |
+
+`train_time_seconds` is the wall time of `fit`, including the per-epoch validation passes used for checkpoint selection.
+
+**Inference without retraining.**
+
+```python
+from src.classifiers.distilbert import predict_proba_from_checkpoint
+probs = predict_proba_from_checkpoint(list_of_passages, "checkpoints/distilbert/<run_name>")
+# 1-D numpy array of P(AI) in [0, 1], same order as the input
+```
+
 ## Final Kaggle submission (later)
 
 After model selection on the shared validation split, the chosen model may be **retrained on all 10,000
