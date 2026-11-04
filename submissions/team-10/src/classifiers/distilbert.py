@@ -11,6 +11,7 @@ get_config) so it plugs into ``src.evaluate``.
 * Probabilities: softmax(logits)[:, 1].
 * Optional ``newline_marker`` (e.g. "[NL]"): every "\n" becomes this added token, because the
   BERT tokenizer otherwise treats line breaks as plain whitespace and drops them.
+  ``space_marker`` (e.g. "[DS]") does the same for runs of 2+ spaces.
 * Pretrained weights download to the Hugging Face cache, not into the repo.
   Fine-tuned checkpoints go under ``checkpoints/`` (git-ignored).
 
@@ -23,6 +24,7 @@ Inference without retraining:
 from __future__ import annotations
 
 import json
+import re
 import time
 from dataclasses import asdict, dataclass, fields, replace
 from pathlib import Path
@@ -58,6 +60,29 @@ class DistilBertConfig:
     max_grad_norm: float = 1.0
     seed: int = 42
     newline_marker: str | None = None
+    space_marker: str | None = None
+
+
+def whitespace_markers(cfg: DistilBertConfig) -> list[str]:
+    return [m for m in (cfg.newline_marker, cfg.space_marker) if m]
+
+
+def mark_whitespace(text: str, cfg: DistilBertConfig) -> str:
+    """Make whitespace the tokenizer would discard visible as marker tokens."""
+    if cfg.space_marker:
+        text = re.sub(r" {2,}", f" {cfg.space_marker} ", text)  # before newlines add their own spaces
+    if cfg.newline_marker:
+        text = text.replace("\n", f" {cfg.newline_marker} ")
+    return text
+
+
+def add_marker_tokens(tokenizer, model, cfg: DistilBertConfig) -> None:
+    """Register marker tokens (matched before lowercasing) and grow the embedding matrix to match."""
+    new = [m for m in whitespace_markers(cfg) if m not in tokenizer.get_vocab()]
+    if new:
+        tokenizer.add_tokens([AddedToken(m, normalized=False) for m in new])
+    if model.get_input_embeddings().num_embeddings < len(tokenizer):
+        model.resize_token_embeddings(len(tokenizer))
 
 
 class _EncodedDataset(Dataset):
@@ -90,16 +115,12 @@ class DistilBertClassifier:
             self.tokenizer = AutoTokenizer.from_pretrained(self.config.model_name)
         if self.model is None:
             self.model = AutoModelForSequenceClassification.from_pretrained(self.config.model_name, num_labels=2)
-        marker = self.config.newline_marker
-        if marker and marker not in self.tokenizer.get_vocab():
-            self.tokenizer.add_tokens([AddedToken(marker, normalized=False)])  # matched before lowercasing
-        if self.model.get_input_embeddings().num_embeddings < len(self.tokenizer):
-            self.model.resize_token_embeddings(len(self.tokenizer))
+        add_marker_tokens(self.tokenizer, self.model, self.config)
         self.model.to(self.device)
 
     def _encode(self, texts: Sequence[str]) -> dict[str, list]:
-        if self.config.newline_marker:
-            texts = [t.replace("\n", f" {self.config.newline_marker} ") for t in texts]
+        if whitespace_markers(self.config):
+            texts = [mark_whitespace(t, self.config) for t in texts]
         enc = self.tokenizer(list(texts), truncation=True, max_length=self.config.max_length)
         return {k: enc[k] for k in ("input_ids", "attention_mask")}
 

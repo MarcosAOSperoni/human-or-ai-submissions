@@ -81,3 +81,13 @@ def test_newline_marker_is_one_token_and_survives_checkpoint(tmp_path):
     loaded = DistilBertClassifier.load(tmp_path / "ckpt", device="cpu")
     assert loaded.config.newline_marker == "[NL]"
     np.testing.assert_allclose(loaded.predict_proba(texts), clf.predict_proba(texts), atol=1e-6)
+
+
+def test_space_marker_with_newline_marker():
+    clf = tiny_classifier(newline_marker="[NL]", space_marker="[DS]")
+    clf._build()
+    nl, ds = clf.tokenizer.convert_tokens_to_ids(["[NL]", "[DS]"])
+    assert {nl, ds} == {TOKENIZER.vocab_size, TOKENIZER.vocab_size + 1}
+    ids = clf._encode(["a  b\nc   d e"])["input_ids"][0]
+    assert ids.count(ds) == 2 and ids.count(nl) == 1
+    assert clf._encode(["a b c"])["input_ids"][0].count(ds) == 0

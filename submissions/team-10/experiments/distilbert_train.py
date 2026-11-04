@@ -22,6 +22,7 @@ import sys
 from pathlib import Path
 
 import numpy as np
+import torch
 
 from src.classifiers.distilbert import DistilBertClassifier, DistilBertConfig
 from src.data import RESULTS_DIR, TEAM_ROOT, SplitData, load_split
@@ -33,14 +34,25 @@ CSV_FIELDS = ["run_name", "learning_rate", "epochs", "batch_size", "max_length",
               "device", "train_time_seconds", "train_auc", "val_auc", "val_accuracy", "notes"]
 
 
+def model_family(cfg: DistilBertConfig) -> str:
+    """'distilbert' for DistilBERT-based models (including DAPT checkpoints), else e.g. 'deberta-v3-base', 'roberta-large'."""
+    base = cfg.model_name.rstrip("/").split("/")[-1]
+    return base if base.startswith(("deberta", "roberta")) else "distilbert"
+
+
 def run_name_for(cfg: DistilBertConfig) -> str:
     # Default model + no marker keeps the original names (e.g. distilbert_lr2e-05_ep3_...).
+    family = model_family(cfg)
     tag = ""
-    if cfg.model_name != DistilBertConfig().model_name:
+    if family == "distilbert" and cfg.model_name != DistilBertConfig().model_name:
         tag += "_" + cfg.model_name.split("/")[-1].removeprefix("distilbert-base-")
     if cfg.newline_marker:
         tag += "_nl"
-    return f"distilbert{tag}_lr{cfg.learning_rate:g}_ep{cfg.epochs}_bs{cfg.batch_size}_len{cfg.max_length}_seed{cfg.seed}"
+    if cfg.space_marker:
+        tag += "_ds"
+    if cfg.warmup_ratio:
+        tag += f"_wu{cfg.warmup_ratio:g}"
+    return f"{family}{tag}_lr{cfg.learning_rate:g}_ep{cfg.epochs}_bs{cfg.batch_size}_len{cfg.max_length}_seed{cfg.seed}"
 
 
 def balanced_subset(split: SplitData, n: int) -> SplitData:
@@ -70,7 +82,7 @@ def train(cfg: DistilBertConfig, limit: int | None = None, device: str | None = 
         split = balanced_subset(split, limit)
     run_name = run_name_for(cfg) + (f"_smoke{limit}" if smoke else "")
     results_dir = RESULTS_DIR / "smoke" if smoke else RESULTS_DIR
-    ckpt_dir = (CHECKPOINT_ROOT / ("smoke" if smoke else "distilbert") / run_name) if save_checkpoint else None
+    ckpt_dir = (CHECKPOINT_ROOT / ("smoke" if smoke else model_family(cfg).split("-")[0]) / run_name) if save_checkpoint else None
 
     clf = DistilBertClassifier(cfg, device=device)
     print(f"[{run_name}] device={clf.device} train={len(split.train_texts)} val={len(split.val_texts)}", flush=True)
@@ -81,13 +93,16 @@ def train(cfg: DistilBertConfig, limit: int | None = None, device: str | None = 
                 checkpoint_dir=ckpt_dir, log=lambda s: print(s, flush=True))
     print(f"[{run_name}] training finished in {t.seconds:.0f}s; scoring train/val with best epoch {clf.best_epoch}",
           flush=True)
+    # Release the allocator cache held from training before inference (see experiments/distilbert_full.py).
+    if clf.device.type == "cuda":
+        torch.cuda.empty_cache()
 
     train_probs = clf.predict_proba(split.train_texts)
     val_probs = clf.predict_proba(split.val_texts)
     hyper = {**clf.get_config(), "device": str(clf.device),
              "checkpoint": str(ckpt_dir.relative_to(TEAM_ROOT)) if ckpt_dir else None}
     result = record_experiment(
-        "distilbert", split, train_probs, val_probs, t.seconds, seed=cfg.seed, hyperparameters=hyper,
+        model_family(cfg), split, train_probs, val_probs, t.seconds, seed=cfg.seed, hyperparameters=hyper,
         notes=notes, history=clf.history, run_name=run_name,
         metrics_dir=results_dir / "metrics", predictions_dir=results_dir / "predictions",
     )
@@ -113,6 +128,8 @@ def parse_args(argv=None) -> argparse.Namespace:
     p.add_argument("--seed", type=int, default=d.seed)
     p.add_argument("--model-name", default=d.model_name)
     p.add_argument("--newline-marker", default=d.newline_marker, help='e.g. "[NL]": encode line breaks as a token')
+    p.add_argument("--space-marker", default=d.space_marker, help='e.g. "[DS]": encode runs of 2+ spaces as a token')
+    p.add_argument("--warmup-ratio", type=float, default=d.warmup_ratio, help="share of steps with linear LR warmup")
     p.add_argument("--device", default=None, help="force cuda / mps / cpu (default: auto)")
     p.add_argument("--limit", type=int, default=None, help="smoke test: use N balanced train and N val examples")
     p.add_argument("--no-checkpoint", action="store_true")
@@ -126,7 +143,8 @@ def main(argv=None) -> None:
         sys.exit("DistilBERT supports at most 512 tokens")
     cfg = DistilBertConfig(model_name=a.model_name, max_length=a.max_length, learning_rate=a.lr,
                            batch_size=a.batch_size, epochs=a.epochs, seed=a.seed,
-                           newline_marker=a.newline_marker)
+                           newline_marker=a.newline_marker, space_marker=a.space_marker,
+                           warmup_ratio=a.warmup_ratio)
     train(cfg, limit=a.limit, device=a.device, save_checkpoint=not a.no_checkpoint, notes=a.notes)
 
 

@@ -7,3 +7,13 @@ distilbert_lr3e-05_ep4_bs16_len512_seed42,3e-05,4,16,512,42,3,cuda,559.355,0.999
 distilbert_cased_nl_lr3e-05_ep4_bs16_len512_seed42,3e-05,4,16,512,42,4,cuda,585.488,1.0,0.997016,0.9875,ablation
 distilbert_nl_lr3e-05_ep4_bs16_len512_seed42,3e-05,4,16,512,42,3,cuda,575.35,0.999995,0.998891,0.9895,ablation
 distilbert_cased_lr3e-05_ep4_bs16_len512_seed42,3e-05,4,16,512,42,4,cuda,577.365,0.999698,0.990906,0.936,ablation
+distilbert_nl_ds_lr3e-05_ep4_bs16_len512_seed42,3e-05,4,16,512,42,4,cuda,573.848,0.999979,0.998585,0.9875,phaseA
+distilbert_nl_lr3e-05_ep4_bs16_len512_seed43,3e-05,4,16,512,43,4,cuda,581.722,1.0,0.998045,0.987,phaseA
+distilbert_nl_lr3e-05_ep4_bs16_len512_seed44,3e-05,4,16,512,44,3,cuda,577.0,0.999959,0.998794,0.989,phaseA
+distilbert_nl_ds_lr3e-05_ep4_bs16_len512_seed43,3e-05,4,16,512,43,4,cuda,613.982,0.99998,0.998117,0.9885,phaseA
+distilbert_nl_ds_lr3e-05_ep4_bs16_len512_seed44,3e-05,4,16,512,44,3,cuda,574.046,1.0,0.998025,0.986,phaseA
+distilbert_dapt-split-nl_nl_lr3e-05_ep4_bs16_len512_seed42,3e-05,4,16,512,42,2,cuda,496.631,0.999903,0.998536,0.983,phaseA
+distilbert_nl_lr2e-05_ep4_bs16_len512_seed42,2e-05,4,16,512,42,3,cuda,575.357,0.999896,0.99843,0.9885,phaseA
+distilbert_nl_lr5e-05_ep4_bs16_len512_seed42,5e-05,4,16,512,42,2,cuda,574.79,0.999957,0.998695,0.9865,phaseA
+deberta-v3-base_nl_wu0.1_lr2e-05_ep3_bs16_len512_seed42,2e-05,3,16,512,42,3,cuda,1663.351,0.999811,0.998639,0.9875,overnight
+deberta-v3-large_nl_wu0.1_lr1e-05_ep3_bs16_len512_seed42,1e-05,3,16,512,42,3,cuda,4650.799,0.999998,0.999816,0.9935,overnight
