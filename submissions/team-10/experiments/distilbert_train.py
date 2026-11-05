@@ -5,6 +5,7 @@ Examples (run from submissions/team-10/):
     python -m experiments.distilbert_train --lr 3e-5 --epochs 4
     python -m experiments.distilbert_train --limit 64 --max-length 128 --epochs 1   # smoke test
     python -m experiments.distilbert_train --lr 3e-5 --epochs 4 --model-name distilbert-base-cased --newline-marker "[NL]"
+    python -m experiments.distilbert_train ... --extra-train results/pseudo/large8k.csv   # self-training
 
 Outputs (full runs):
     results/metrics/<run>.json                    metrics + per-epoch history (committed)
@@ -22,6 +23,7 @@ import sys
 from pathlib import Path
 
 import numpy as np
+import pandas as pd
 import torch
 
 from src.classifiers.distilbert import DistilBertClassifier, DistilBertConfig
@@ -57,6 +59,14 @@ def run_name_for(cfg: DistilBertConfig) -> str:
     return f"{family}{tag}_lr{cfg.learning_rate:g}_ep{cfg.epochs}_bs{cfg.batch_size}_len{cfg.max_length}_seed{cfg.seed}"
 
 
+def load_extra_train(path: Path | None) -> tuple[list[str], np.ndarray, str]:
+    """Extra (e.g. pseudo-labeled) training passages from an id,text,label CSV and the run-name suffix."""
+    if path is None:
+        return [], np.zeros(0, dtype=int), ""
+    df = pd.read_csv(path)
+    return df["text"].astype(str).tolist(), df["label"].to_numpy(dtype=int), f"_pl-{Path(path).stem}"
+
+
 def balanced_subset(split: SplitData, n: int) -> SplitData:
     """First n/2 of each class from train and from val — for quick smoke tests only."""
     def pick(labels: np.ndarray) -> np.ndarray:
@@ -77,21 +87,25 @@ def append_csv(path: Path, row: dict) -> None:
 
 
 def train(cfg: DistilBertConfig, limit: int | None = None, device: str | None = None,
-          save_checkpoint: bool = True, notes: str = "") -> dict:
+          save_checkpoint: bool = True, notes: str = "", extra_train: Path | None = None) -> dict:
     split = load_split()
     smoke = limit is not None
     if smoke:
         split = balanced_subset(split, limit)
-    run_name = run_name_for(cfg) + (f"_smoke{limit}" if smoke else "")
+    extra_texts, extra_labels, extra_tag = load_extra_train(extra_train)
+    extra_texts, extra_labels = extra_texts[:limit], extra_labels[:limit]
+    run_name = run_name_for(cfg) + extra_tag + (f"_smoke{limit}" if smoke else "")
     results_dir = RESULTS_DIR / "smoke" if smoke else RESULTS_DIR
     ckpt_dir = (CHECKPOINT_ROOT / ("smoke" if smoke else model_family(cfg).split("-")[0]) / run_name) if save_checkpoint else None
 
     clf = DistilBertClassifier(cfg, device=device)
-    print(f"[{run_name}] device={clf.device} train={len(split.train_texts)} val={len(split.val_texts)}", flush=True)
+    print(f"[{run_name}] device={clf.device} train={len(split.train_texts)} extra={len(extra_texts)} "
+          f"val={len(split.val_texts)}", flush=True)
 
     # Validation is used only to pick the best epoch (checkpoint selection), never for gradient updates.
     with Timer() as t:
-        clf.fit(split.train_texts, split.train_labels, split.val_texts, split.val_labels,
+        clf.fit(split.train_texts + extra_texts, np.concatenate([split.train_labels, extra_labels]),
+                split.val_texts, split.val_labels,
                 checkpoint_dir=ckpt_dir, log=lambda s: print(s, flush=True))
     print(f"[{run_name}] training finished in {t.seconds:.0f}s; scoring train/val with best epoch {clf.best_epoch}",
           flush=True)
@@ -137,6 +151,8 @@ def parse_args(argv=None) -> argparse.Namespace:
     p.add_argument("--device", default=None, help="force cuda / mps / cpu (default: auto)")
     p.add_argument("--limit", type=int, default=None, help="smoke test: use N balanced train and N val examples")
     p.add_argument("--no-checkpoint", action="store_true")
+    p.add_argument("--extra-train", type=Path, default=None,
+                   help="id,text,label CSV appended to the training split (e.g. results/pseudo/<name>.csv)")
     p.add_argument("--notes", default="")
     return p.parse_args(argv)
 
@@ -150,7 +166,8 @@ def main(argv=None) -> None:
                            newline_marker=a.newline_marker, space_marker=a.space_marker,
                            warmup_ratio=a.warmup_ratio, bf16=a.bf16,
                            gradient_checkpointing=a.grad_checkpointing)
-    train(cfg, limit=a.limit, device=a.device, save_checkpoint=not a.no_checkpoint, notes=a.notes)
+    train(cfg, limit=a.limit, device=a.device, save_checkpoint=not a.no_checkpoint, notes=a.notes,
+          extra_train=a.extra_train)
 
 
 if __name__ == "__main__":
