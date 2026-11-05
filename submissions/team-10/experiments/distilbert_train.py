@@ -6,6 +6,7 @@ Examples (run from submissions/team-10/):
     python -m experiments.distilbert_train --limit 64 --max-length 128 --epochs 1   # smoke test
     python -m experiments.distilbert_train --lr 3e-5 --epochs 4 --model-name distilbert-base-cased --newline-marker "[NL]"
     python -m experiments.distilbert_train ... --extra-train results/pseudo/large8k.csv   # self-training
+    python -m experiments.distilbert_train ... --train-size 2000   # learning curve: balanced subset of the 8k
 
 Outputs (full runs):
     results/metrics/<run>.json                    metrics + per-epoch history (committed)
@@ -67,6 +68,18 @@ def load_extra_train(path: Path | None) -> tuple[list[str], np.ndarray, str]:
     return df["text"].astype(str).tolist(), df["label"].to_numpy(dtype=int), f"_pl-{Path(path).stem}"
 
 
+def subsample_train(split: SplitData, n: int, seed: int = 42) -> SplitData:
+    """Class-balanced n-row subset of the training split; validation is unchanged.
+
+    Fixed seed and per-class permutations make the subsets nested (1k within 2k within 4k), so
+    learning-curve points differ only by the added data, not by which rows were drawn.
+    """
+    rng = np.random.default_rng(seed)
+    idx = np.sort(np.concatenate([rng.permutation(np.flatnonzero(split.train_labels == c))[: n // 2] for c in (0, 1)]))
+    return SplitData(split.train_ids[idx], [split.train_texts[i] for i in idx], split.train_labels[idx],
+                     split.val_ids, split.val_texts, split.val_labels, split.seed)
+
+
 def balanced_subset(split: SplitData, n: int) -> SplitData:
     """First n/2 of each class from train and from val — for quick smoke tests only."""
     def pick(labels: np.ndarray) -> np.ndarray:
@@ -87,14 +100,18 @@ def append_csv(path: Path, row: dict) -> None:
 
 
 def train(cfg: DistilBertConfig, limit: int | None = None, device: str | None = None,
-          save_checkpoint: bool = True, notes: str = "", extra_train: Path | None = None) -> dict:
+          save_checkpoint: bool = True, notes: str = "", extra_train: Path | None = None,
+          train_size: int | None = None) -> dict:
     split = load_split()
+    if train_size is not None:
+        split = subsample_train(split, train_size)
     smoke = limit is not None
     if smoke:
         split = balanced_subset(split, limit)
     extra_texts, extra_labels, extra_tag = load_extra_train(extra_train)
     extra_texts, extra_labels = extra_texts[:limit], extra_labels[:limit]
-    run_name = run_name_for(cfg) + extra_tag + (f"_smoke{limit}" if smoke else "")
+    size_tag = f"_n{train_size}" if train_size is not None else ""
+    run_name = run_name_for(cfg) + size_tag + extra_tag + (f"_smoke{limit}" if smoke else "")
     results_dir = RESULTS_DIR / "smoke" if smoke else RESULTS_DIR
     ckpt_dir = (CHECKPOINT_ROOT / ("smoke" if smoke else model_family(cfg).split("-")[0]) / run_name) if save_checkpoint else None
 
@@ -153,6 +170,8 @@ def parse_args(argv=None) -> argparse.Namespace:
     p.add_argument("--no-checkpoint", action="store_true")
     p.add_argument("--extra-train", type=Path, default=None,
                    help="id,text,label CSV appended to the training split (e.g. results/pseudo/<name>.csv)")
+    p.add_argument("--train-size", type=int, default=None,
+                   help="learning curve: train on a class-balanced subset of N training-split rows")
     p.add_argument("--notes", default="")
     return p.parse_args(argv)
 
@@ -167,7 +186,7 @@ def main(argv=None) -> None:
                            warmup_ratio=a.warmup_ratio, bf16=a.bf16,
                            gradient_checkpointing=a.grad_checkpointing)
     train(cfg, limit=a.limit, device=a.device, save_checkpoint=not a.no_checkpoint, notes=a.notes,
-          extra_train=a.extra_train)
+          extra_train=a.extra_train, train_size=a.train_size)
 
 
 if __name__ == "__main__":
