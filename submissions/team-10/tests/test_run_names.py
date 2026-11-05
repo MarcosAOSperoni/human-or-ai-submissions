@@ -24,3 +24,6 @@ def test_run_name_tags():
                            newline_marker="[NL]", warmup_ratio=0.1)
     assert run_name_for(cfg) == "roberta-large_nl_wu0.1_lr1e-05_ep3_bs16_len512_seed42"
     assert run_name_for(DistilBertConfig()) == "distilbert_lr2e-05_ep3_bs16_len512_seed42"
+    xl = DistilBertConfig(model_name="models/deberta-v2-xlarge", learning_rate=5e-6, newline_marker="[NL]",
+                          warmup_ratio=0.1, bf16=True, gradient_checkpointing=True)
+    assert run_name_for(xl) == "deberta-v2-xlarge_nl_wu0.1_bf16_lr5e-06_ep3_bs16_len512_seed42"

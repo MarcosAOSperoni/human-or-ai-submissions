@@ -7,6 +7,7 @@ Needs the distilbert-base-uncased tokenizer in the local Hugging Face cache
 import copy
 
 import numpy as np
+import torch
 import pytest
 
 transformers = pytest.importorskip("transformers")
@@ -91,3 +92,15 @@ def test_space_marker_with_newline_marker():
     ids = clf._encode(["a  b\nc   d e"])["input_ids"][0]
     assert ids.count(ds) == 2 and ids.count(nl) == 1
     assert clf._encode(["a b c"])["input_ids"][0].count(ds) == 0
+
+
+def test_bf16_and_gradient_checkpointing_train_and_predict(tmp_path):
+    clf = tiny_classifier(bf16=True, gradient_checkpointing=True)
+    clf.fit(TEXTS, LABELS, TEXTS[:12], LABELS[:12], checkpoint_dir=tmp_path / "ckpt", log=lambda s: None)
+    assert clf.model.is_gradient_checkpointing
+    assert next(clf.model.parameters()).dtype == torch.float32  # autocast only; weights stay fp32
+    probs = clf.predict_proba(TEXTS)
+    assert probs.dtype == np.float64 and np.all(np.isfinite(probs))
+    loaded = DistilBertClassifier.load(tmp_path / "ckpt", device="cpu")
+    assert loaded.config.bf16 and loaded.config.gradient_checkpointing
+    np.testing.assert_allclose(loaded.predict_proba(TEXTS), clf.predict_proba(TEXTS), atol=1e-6)

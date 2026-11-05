@@ -61,6 +61,8 @@ class DistilBertConfig:
     seed: int = 42
     newline_marker: str | None = None
     space_marker: str | None = None
+    bf16: bool = False  # bfloat16 autocast for forward passes; weights and optimizer state stay fp32
+    gradient_checkpointing: bool = False  # recompute activations in backward to save memory
 
 
 def whitespace_markers(cfg: DistilBertConfig) -> list[str]:
@@ -127,6 +129,9 @@ class DistilBertClassifier:
     def _to_device(self, batch: dict[str, torch.Tensor]) -> dict[str, torch.Tensor]:
         return {k: v.to(self.device) for k, v in batch.items()}
 
+    def _autocast(self):
+        return torch.autocast(device_type=self.device.type, dtype=torch.bfloat16, enabled=self.config.bf16)
+
     # --------------------------------------------------------------- training
     def fit(
         self,
@@ -142,6 +147,10 @@ class DistilBertClassifier:
         set_seed(cfg.seed)
         self._build()
         model = self.model
+        if cfg.gradient_checkpointing:
+            # Non-reentrant: DeBERTa feeds shared relative-position embeddings into every layer, which the
+            # reentrant variant backpropagates through twice ("backward through the graph a second time").
+            model.gradient_checkpointing_enable(gradient_checkpointing_kwargs={"use_reentrant": False})
 
         generator = torch.Generator().manual_seed(cfg.seed)
         train_loader = DataLoader(
@@ -173,7 +182,8 @@ class DistilBertClassifier:
             loss_sum, n_seen = 0.0, 0
             for step, batch in enumerate(train_loader, 1):
                 batch = self._to_device(batch)
-                loss = model(**batch).loss
+                with self._autocast():
+                    loss = model(**batch).loss
                 optimizer.zero_grad(set_to_none=True)
                 loss.backward()
                 torch.nn.utils.clip_grad_norm_(model.parameters(), cfg.max_grad_norm)
@@ -192,6 +202,8 @@ class DistilBertClassifier:
                 "train_seconds": round(time.perf_counter() - t0, 2),
                 "lr_end": scheduler.get_last_lr()[0],
             }
+            if self.device.type == "cuda":
+                record["peak_mem_gb"] = round(torch.cuda.max_memory_allocated(self.device) / 1e9, 1)
             if has_val:
                 val_probs, val_loss = self._predict(val_texts, val_labels)
                 record["val_loss"] = val_loss
@@ -226,7 +238,8 @@ class DistilBertClassifier:
                             shuffle=False, collate_fn=DataCollatorWithPadding(self.tokenizer))
         probs, loss_sum = [], 0.0
         for batch in loader:
-            out = self.model(**self._to_device(batch))
+            with self._autocast():
+                out = self.model(**self._to_device(batch))
             probs.append(torch.softmax(out.logits.float(), dim=-1)[:, 1].cpu().numpy())
             if labels is not None:
                 loss_sum += out.loss.item() * batch["input_ids"].shape[0]
