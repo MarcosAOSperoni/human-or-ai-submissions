@@ -5,8 +5,9 @@ import pytest
 
 pytest.importorskip("transformers")
 from experiments.distilbert_train import subsample_train  # noqa: E402
-from experiments.genre_holdout import holdout_split, is_recipe  # noqa: E402
+from experiments.genre_holdout import holdout_split  # noqa: E402
 from src.data import SplitData  # noqa: E402
+from src.genres import is_recipe  # noqa: E402
 
 
 def _split(n=200):

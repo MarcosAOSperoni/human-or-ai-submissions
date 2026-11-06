@@ -22,7 +22,6 @@ from __future__ import annotations
 
 import argparse
 import json
-import re
 from dataclasses import asdict
 
 import numpy as np
@@ -34,16 +33,10 @@ from experiments.distilbert_train import run_name_for
 from src.classifiers.distilbert import DistilBertClassifier, DistilBertConfig
 from src.data import DATA_DIR, RESULTS_DIR, load_labeled
 from src.evaluate import Timer
+from src.genres import is_recipe
 
-RECIPE_TERMS = re.compile(
-    r"\b(ingredients?|tablespoons?|teaspoons?|tbsp|tsp|preheat|cups? (of )?\w+|oven|simmer|bake|"
-    r"\d+ (ounces?|oz|pounds?|lbs?|grams?|g|cloves?|pinch))\b", re.I)
 N_EVAL = 1000
 SPLIT_SEED = 42
-
-
-def is_recipe(text: str) -> bool:
-    return len(RECIPE_TERMS.findall(text)) >= 2
 
 
 def holdout_split(is_genre: np.ndarray, condition: str, train_size: int,
