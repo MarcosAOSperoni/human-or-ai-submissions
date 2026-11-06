@@ -45,6 +45,8 @@ def main(argv=None) -> None:
     p.add_argument("--warmup-ratio", type=float, default=d.warmup_ratio)
     p.add_argument("--bf16", action="store_true", help="bfloat16 autocast for forward passes; weights stay fp32")
     p.add_argument("--grad-checkpointing", action="store_true", help="trade compute for activation memory")
+    p.add_argument("--layout-aug", type=float, default=0.0,
+                   help="share of training passages given a random line layout each epoch (src.layout)")
     p.add_argument("--extra-train", type=Path, default=None,
                    help="id,text,label CSV appended to the labeled data (e.g. results/pseudo/<name>.csv)")
     p.add_argument("--seeds", type=int, nargs="+", default=[42, 43, 44])
@@ -67,7 +69,7 @@ def main(argv=None) -> None:
                                batch_size=a.batch_size, epochs=a.epochs, seed=seed,
                                newline_marker=a.newline_marker, space_marker=a.space_marker,
                                warmup_ratio=a.warmup_ratio, bf16=a.bf16,
-                               gradient_checkpointing=a.grad_checkpointing)
+                               gradient_checkpointing=a.grad_checkpointing, layout_aug=a.layout_aug)
         run = run_name_for(cfg) + extra_tag + "_full"
         out_csv = sub_dir / f"{run}.csv"
         if out_csv.exists():

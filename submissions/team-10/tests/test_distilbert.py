@@ -104,3 +104,13 @@ def test_bf16_and_gradient_checkpointing_train_and_predict(tmp_path):
     loaded = DistilBertClassifier.load(tmp_path / "ckpt", device="cpu")
     assert loaded.config.bf16 and loaded.config.gradient_checkpointing
     np.testing.assert_allclose(loaded.predict_proba(TEXTS), clf.predict_proba(TEXTS), atol=1e-6)
+
+
+def test_layout_aug_trains_reproducibly_and_survives_checkpoint(tmp_path):
+    texts = [t.replace(" ", "\n", 2) for t in TEXTS]  # give the augmentation line breaks to change
+    a, b = tiny_classifier(newline_marker="[NL]", layout_aug=0.5), tiny_classifier(newline_marker="[NL]", layout_aug=0.5)
+    b.model.load_state_dict(a.model.state_dict())
+    a.fit(texts, LABELS, texts[:6], LABELS[:6], checkpoint_dir=tmp_path / "ckpt", log=lambda s: None)
+    b.fit(texts, LABELS, texts[:6], LABELS[:6], checkpoint_dir=tmp_path / "ckpt_b", log=lambda s: None)
+    np.testing.assert_allclose(a.predict_proba(texts), b.predict_proba(texts), atol=1e-6)
+    assert DistilBertClassifier.load(tmp_path / "ckpt", device="cpu").config.layout_aug == 0.5

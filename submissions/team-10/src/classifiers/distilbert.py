@@ -42,6 +42,7 @@ from transformers import (
     get_linear_schedule_with_warmup,
 )
 
+from src.layout import augment_layouts
 from src.utils import get_device, set_seed
 
 CONFIG_FILE = "team10_distilbert.json"
@@ -63,6 +64,7 @@ class DistilBertConfig:
     space_marker: str | None = None
     bf16: bool = False  # bfloat16 autocast for forward passes; weights and optimizer state stay fp32
     gradient_checkpointing: bool = False  # recompute activations in backward to save memory
+    layout_aug: float = 0.0  # share of training passages re-laid-out each epoch (src.layout), label-independent
 
 
 def whitespace_markers(cfg: DistilBertConfig) -> list[str]:
@@ -153,13 +155,17 @@ class DistilBertClassifier:
             model.gradient_checkpointing_enable(gradient_checkpointing_kwargs={"use_reentrant": False})
 
         generator = torch.Generator().manual_seed(cfg.seed)
-        train_loader = DataLoader(
-            _EncodedDataset(self._encode(train_texts), np.asarray(train_labels)),
-            batch_size=cfg.batch_size,
-            shuffle=True,
-            generator=generator,
-            collate_fn=DataCollatorWithPadding(self.tokenizer),
-        )
+
+        def make_loader(texts: Sequence[str]) -> DataLoader:
+            return DataLoader(
+                _EncodedDataset(self._encode(texts), np.asarray(train_labels)),
+                batch_size=cfg.batch_size,
+                shuffle=True,
+                generator=generator,
+                collate_fn=DataCollatorWithPadding(self.tokenizer),
+            )
+
+        train_loader = make_loader(train_texts)
 
         no_decay = ("bias", "LayerNorm.weight")
         groups = [
@@ -177,6 +183,9 @@ class DistilBertClassifier:
         has_val = val_texts is not None and val_labels is not None
 
         for epoch in range(1, cfg.epochs + 1):
+            if cfg.layout_aug:  # fresh random layouts every epoch; same number of batches
+                train_loader = make_loader(augment_layouts(list(train_texts), cfg.layout_aug,
+                                                           np.random.default_rng([cfg.seed, epoch])))
             model.train()
             t0 = time.perf_counter()
             loss_sum, n_seen = 0.0, 0

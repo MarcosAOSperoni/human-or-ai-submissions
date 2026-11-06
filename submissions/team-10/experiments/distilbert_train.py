@@ -38,9 +38,9 @@ CSV_FIELDS = ["run_name", "learning_rate", "epochs", "batch_size", "max_length",
 
 
 def model_family(cfg: DistilBertConfig) -> str:
-    """'distilbert' for DistilBERT-based models (including DAPT checkpoints), else e.g. 'deberta-v3-base', 'roberta-large'."""
+    """'distilbert' for DistilBERT-based models (including DAPT checkpoints), else e.g. 'deberta-v3-base', 'roberta-large', 'electra-large-discriminator'."""
     base = cfg.model_name.rstrip("/").split("/")[-1]
-    return base if base.startswith(("deberta", "roberta")) else "distilbert"
+    return base if base.startswith(("deberta", "roberta", "electra")) else "distilbert"
 
 
 def run_name_for(cfg: DistilBertConfig) -> str:
@@ -57,6 +57,8 @@ def run_name_for(cfg: DistilBertConfig) -> str:
         tag += f"_wu{cfg.warmup_ratio:g}"
     if cfg.bf16:
         tag += "_bf16"
+    if cfg.layout_aug:
+        tag += f"_aug{cfg.layout_aug:g}"
     return f"{family}{tag}_lr{cfg.learning_rate:g}_ep{cfg.epochs}_bs{cfg.batch_size}_len{cfg.max_length}_seed{cfg.seed}"
 
 
@@ -165,6 +167,8 @@ def parse_args(argv=None) -> argparse.Namespace:
     p.add_argument("--warmup-ratio", type=float, default=d.warmup_ratio, help="share of steps with linear LR warmup")
     p.add_argument("--bf16", action="store_true", help="bfloat16 autocast for forward passes; weights stay fp32")
     p.add_argument("--grad-checkpointing", action="store_true", help="trade compute for activation memory")
+    p.add_argument("--layout-aug", type=float, default=0.0,
+                   help="share of training passages given a random line layout each epoch (src.layout)")
     p.add_argument("--device", default=None, help="force cuda / mps / cpu (default: auto)")
     p.add_argument("--limit", type=int, default=None, help="smoke test: use N balanced train and N val examples")
     p.add_argument("--no-checkpoint", action="store_true")
@@ -184,7 +188,7 @@ def main(argv=None) -> None:
                            batch_size=a.batch_size, epochs=a.epochs, seed=a.seed,
                            newline_marker=a.newline_marker, space_marker=a.space_marker,
                            warmup_ratio=a.warmup_ratio, bf16=a.bf16,
-                           gradient_checkpointing=a.grad_checkpointing)
+                           gradient_checkpointing=a.grad_checkpointing, layout_aug=a.layout_aug)
     train(cfg, limit=a.limit, device=a.device, save_checkpoint=not a.no_checkpoint, notes=a.notes,
           extra_train=a.extra_train, train_size=a.train_size)
 
