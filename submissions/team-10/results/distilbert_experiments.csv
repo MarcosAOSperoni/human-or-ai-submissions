@@ -37,3 +37,7 @@ deberta-v3-large_nl_wu0.1_lr1e-05_ep3_bs16_len512_seed43,1e-05,3,16,512,43,3,cud
 deberta-v3-large_nl_wu0.1_lr1e-05_ep3_bs16_len512_seed43_pl-large8k,1e-05,3,16,512,43,3,cuda,6246.311,0.999999,0.999456,0.9935,"self-training: + confident unlabeled.csv pseudo-labels (8k large seed42, t=0.02)"
 electra-large-discriminator_nl_wu0.1_lr1e-05_ep3_bs16_len512_seed42,1e-05,3,16,512,42,3,cuda,3133.122,0.999449,0.997887,0.985,ELECTRA-large: blend partner for DeBERTa-large?
 deberta-v3-large_nl_wu0.1_aug0.5_lr1e-05_ep3_bs16_len512_seed42,1e-05,3,16,512,42,3,cuda,4665.168,0.999952,0.999422,0.9895,layout augmentation 0.5
+deberta-v3-large_nl_wu0.1_aug0.5_lr1e-05_ep8_bs16_len512_seed42,1e-05,8,16,512,42,5,cuda,12336.436,0.999994,0.999584,0.974,training length: 8 epochs
+deberta-v3-large_wu0.1_lr1e-05_ep3_bs16_len512_seed42,1e-05,3,16,512,42,3,cuda,4380.622,0.999788,0.997632,0.98,DeBERTa-large without [NL]
+deberta-v3-large_nl_wu0.1_lr1e-05_ep3_bs16_len512_seed42_n500,1e-05,3,16,512,42,3,cuda,513.151,0.999952,0.996041,0.9775,learning curve
+deberta-v3-large_nl_wu0.1_lr1e-05_ep3_bs16_len512_seed42_n5000,1e-05,3,16,512,42,1,cuda,2928.169,0.999216,0.999185,0.99,learning curve
