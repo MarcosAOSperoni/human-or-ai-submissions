@@ -39,7 +39,7 @@ The model is retrained on all 10,000 labeled rows, keeping the last epoch. Four 
 | `experiments/distilbert_full.py` | Final models: all 10k rows, one model per seed, seed-averaged test predictions |
 | `experiments/*.py` (others) | Stress test, pseudo-labeling, Binoculars, genre hold-out, test-time augmentation, figures |
 | `predict.py` | Writes a submission from one saved checkpoint |
-| `run_*.sh` | The exact job scripts we ran on our GPU machine (DGX Spark). Paths are machine-specific, so use the commands below elsewhere. |
+| `scripts/run_*.sh` | The exact job scripts we ran on our GPU machine (DGX Spark). Paths are machine-specific, so use the commands below elsewhere. Two scripts (`run_ablation.sh`, `run_phase_a.sh`) run from `submissions/team-10/`, as in `bash scripts/run_ablation.sh`. |
 | `logreg/` | Logistic-regression track (see [Logistic regression](#logistic-regression-joshua)) |
 | `results/` | Metrics JSONs, run summary CSV, figures (committed); `results/logreg/` for the logistic regression |
 | `tests/` | Unit tests (`tests/logreg/` for the logistic regression) |
