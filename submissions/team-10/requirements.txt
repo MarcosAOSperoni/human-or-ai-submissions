@@ -8,3 +8,5 @@ transformers>=4.40,<5
 sentencepiece>=0.2,<1   # DeBERTa-v3 tokenizer
 protobuf>=4,<7
 pytest>=8,<9
+ipython
+nbformat

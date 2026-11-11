@@ -4,13 +4,13 @@ This is a binary text classifier that predicts whether a passage was written by 
 The metric is **AUROC**, and the Kaggle submission is P(AI) for every `test.csv` ID.
 
 **Team members:** Marcos Speroni (mas954), Joshua Huang (jh3262), Kim Cuong Tran Dang (kd562)
-**Kaggle team name:** Group Number 10
+**Kaggle team name:** `Group Number 10`
 
 | Approach | Code | Owner |
 |---|---|---|
 | Transformer fine-tuning (DistilBERT → DeBERTa-v3-large, final model) | `src/classifiers/distilbert.py`, `experiments/` | Marcos Speroni |
 | TF-IDF + logistic regression (stacked feature blocks) | `logreg/` | Joshua Huang |
-| Text CNN from scratch (PyTorch) | `src/classifiers/text_cnn.py` | Kim Cuong Tran Dang |
+| Text CNN from scratch (PyTorch) | `cnn.ipynb` | Kim Cuong Tran Dang |
 
 ## Final approach
 
@@ -43,7 +43,7 @@ The model is retrained on all 10,000 labeled rows, keeping the last epoch. Four 
 | `logreg/` | Logistic-regression track (see [Logistic regression](#logistic-regression-joshua)) |
 | `results/` | Metrics JSONs, run summary CSV, figures (committed); `results/logreg/` for the logistic regression |
 | `tests/` | Unit tests (`tests/logreg/` for the logistic regression) |
-| `src/classifiers/text_cnn.py` | Text CNN (Kim) — _still a stub; add code and commands_ |
+| `cnn.ipynb` | Text CNN (Kim): training and validation comparison of 128 and 64 filters |
 | `src/classifiers/logistic_regression.py` | Unused stub from the initial template (the logistic regression lives in `logreg/`) |
 
 ## Setup
@@ -82,7 +82,7 @@ python -m src.data verify    # confirm your train.csv matches the committed spli
 python -m src.data inspect   # optional: format, balance and duplicate checks -> results/data_report.json
 ```
 
-Each validation run scores the 2,000 held-out rows after every epoch and keeps the epoch with the best validation AUROC. Hyperparameters were chosen on this split only. Because the split chooses both the epoch and the configuration, the reported validation AUROC is slightly optimistic.
+Each transformer validation run scores the 2,000 held-out rows after every epoch and keeps the epoch with the best validation AUROC. Hyperparameters were chosen on this split only. Because the split chooses both the epoch and the configuration, the reported validation AUROC is slightly optimistic. The CNN comparison evaluates the final epoch, as described below.
 
 ## Reproducing the final submission
 
@@ -212,7 +212,40 @@ Notes:
 
 ## Text CNN (Kim)
 
-_Kim: add your code, the command that runs it, its seed and its validation AUROC._
+Code: `cnn.ipynb`
+
+I implemented two models with 128 filters versus 64 filters. Both models use 64-dimensional embeddings, one convolutional layer, kernel size 3, ReLU, global max pooling and a linear output layer.
+
+### Fixed settings
+
+- Stratified training/validation split: 8,000/2,000 examples.
+- Split, initialization and batch-shuffling seed: 42.
+- Vocabulary: up to 30,000 entries, built from training text only.
+- Sequence length: 512 tokens.
+- Batch size: 64.
+- Optimizer: AdamW, learning rate 0.001, weight decay 0.01.
+- Loss: `BCEWithLogitsLoss`.
+- Training: 30 epochs on CPU; evaluation uses the final epoch.
+
+### Install and run
+
+Use the shared environment and dependencies from the Setup section. Run from `submissions/team-10/`, with the Kaggle files in `data/`:
+
+```bash
+python -m src.data verify
+python -m IPython -c "%run cnn.ipynb"
+```
+
+The notebook prints training AUROC, validation AUROC and training time for each model. The recorded notebook used Python 3.15.1; the shared setup above uses Python 3.12.
+
+### Results
+
+| Filters | Training AUROC | Validation AUROC | Training seconds |
+|---|---:|---:|---:|
+| 128 | 1.0000 | 0.9613 | 272.12 |
+| 64 | 1.0000 | 0.9527 | 162.63 |
+
+Training time excludes preprocessing and final evaluation and depends on the machine.
 
 ## AI assistance
 
@@ -220,4 +253,7 @@ _Each section must match report Q6.3._
 
 - **Transformer track and final model (Marcos):** Claude Code (Anthropic) helped write and debug the training and experiment code, run and monitor jobs on our GPU machine, analyze results, make figures, and edit the README and report drafts. I chose the experiments, reviewed every commit before it was pushed, checked reported numbers against the logs and metrics files, and made the final model and submission decisions. No AI tool was used to label or predict test passages.
 - **Logistic regression track (Joshua):** Claude Code helped write the feature, stacking and ablation scripts and ran the sweeps. I chose the features, reviewed the code, and checked the numbers against the saved metrics files. Pretrained GPT-2 is used for the log-probability features.
-- **Text CNN (Kim):** _add yours._
+- **CNN (Kim Cuong)**: For the CNN, we used ChatGPT to assist in writing tokenization, convolutional model, and evaluation
+code. It helped simplify and presented the code and also the writeup. We reviewed, compared with
+our own writings and edited to make sure of our understandings and make sure that they are good for
+submission
