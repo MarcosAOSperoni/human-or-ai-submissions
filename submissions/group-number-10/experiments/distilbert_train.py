@@ -1,6 +1,6 @@
 """Fine-tune DistilBERT on the shared 8,000/2,000 split and record results.
 
-Examples (run from submissions/team-10/):
+Examples (run from submissions/group-number-10/):
     python -m experiments.distilbert_train                               # baseline: lr 2e-5, bs 16, 3 epochs
     python -m experiments.distilbert_train --lr 3e-5 --epochs 4
     python -m experiments.distilbert_train --limit 64 --max-length 128 --epochs 1   # smoke test

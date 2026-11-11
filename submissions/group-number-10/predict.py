@@ -1,6 +1,6 @@
 """Write a Kaggle submission (id,label = P(AI)) from a saved DistilBERT checkpoint.
 
-Examples (run from submissions/team-10/):
+Examples (run from submissions/group-number-10/):
     python predict.py                                                  # default checkpoint -> submission.csv
     python predict.py --checkpoint checkpoints/distilbert/<run> --out results/submissions/<run>.csv
 

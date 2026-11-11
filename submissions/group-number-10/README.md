@@ -39,7 +39,7 @@ The model is retrained on all 10,000 labeled rows, keeping the last epoch. Four 
 | `experiments/distilbert_full.py` | Final models: all 10k rows, one model per seed, seed-averaged test predictions |
 | `experiments/*.py` (others) | Stress test, pseudo-labeling, Binoculars, genre hold-out, test-time augmentation, figures |
 | `predict.py` | Writes a submission from one saved checkpoint |
-| `scripts/run_*.sh` | The exact job scripts we ran on our GPU machine (DGX Spark). Paths are machine-specific, so use the commands below elsewhere. Two scripts (`run_ablation.sh`, `run_phase_a.sh`) run from `submissions/team-10/`, as in `bash scripts/run_ablation.sh`. |
+| `scripts/run_*.sh` | The exact job scripts we ran on our GPU machine (DGX Spark). Paths are machine-specific, so use the commands below elsewhere. Two scripts (`run_ablation.sh`, `run_phase_a.sh`) run from `submissions/group-number-10/`, as in `bash scripts/run_ablation.sh`. |
 | `logreg/` | Logistic-regression track (see [Logistic regression](#logistic-regression-joshua)) |
 | `results/` | Metrics JSONs, run summary CSV, figures (committed); `results/logreg/` for the logistic regression |
 | `tests/` | Unit tests (`tests/logreg/` for the logistic regression) |
@@ -51,7 +51,7 @@ The model is retrained on all 10,000 labeled rows, keeping the last epoch. Four 
 Python 3.12. A CUDA GPU is needed for the final model: DeBERTa-v3-large at batch size 16 in fp32 peaked at about 51 GB of GPU memory.
 
 ```bash
-cd submissions/team-10
+cd submissions/group-number-10
 python3.12 -m venv .venv
 source .venv/bin/activate
 pip install --upgrade pip
@@ -218,7 +218,7 @@ The stacked model trains one logistic regression per block and combines their ou
 meta logistic regression.
 
 ```bash
-# from submissions/team-10/
+# from submissions/group-number-10/
 python -m logreg.ablation   # one logreg per block combo, C by 5-fold CV -> results/logreg/ablation.json + metrics/
 python -m logreg.stack      # stacked model, words-C sweep, test-like check, refit on all 10k
                             # -> results/logreg/stack_sweep.json + submissions/logreg_stacked_wordsC<C>.csv
@@ -250,7 +250,7 @@ I implemented two models with 128 filters versus 64 filters. Both models use 64-
 
 ### Install and run
 
-Use the shared environment and dependencies from the Setup section. Run from `submissions/team-10/`, with the Kaggle files in `data/`:
+Use the shared environment and dependencies from the Setup section. Run from `submissions/group-number-10/`, with the Kaggle files in `data/`:
 
 ```bash
 python -m src.data verify
