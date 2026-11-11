@@ -14,7 +14,7 @@ The metric is **AUROC**, and the Kaggle submission is P(AI) for every `test.csv`
 
 ## Final approach
 
-The final model is DeBERTa-v3-large, fine-tuned end to end with three changes:
+The final submission comes from the transformer fine-tuning track (Marcos; see [its section](#transformer-fine-tuning-marcos--final-model)). The final model is DeBERTa-v3-large, fine-tuned end to end with three changes:
 
 - **`[NL]` token.** Line breaks are replaced by a new `[NL]` token. The tokenizer otherwise drops them, and line layout carries signal.
 - **Layout augmentation.** In each epoch, half of the training passages get a random line layout from `src/layout.py`. This keeps the model from using line layout as a shortcut.
@@ -106,47 +106,6 @@ To score a single saved checkpoint instead:
 python predict.py --checkpoint checkpoints/full/<run> --out submission.csv
 ```
 
-## Validation experiments
-
-Each run of `experiments.distilbert_train` writes:
-- `results/metrics/<run>.json`: config, seed, per-epoch losses and AUROC, train/val metrics.
-- One row in `results/distilbert_experiments.csv`.
-- Validation predictions in `results/predictions/` (git-ignored).
-
-```bash
-# final recipe on the validation split (val AUROC 0.99942)
-python -m experiments.distilbert_train --model-name microsoft/deberta-v3-large --lr 1e-5 --epochs 3 \
-  --warmup-ratio 0.1 --newline-marker "[NL]" --layout-aug 0.5 --seed 42
-
-# model comparison (same settings without augmentation; swap the model name)
-python -m experiments.distilbert_train --model-name microsoft/deberta-v3-large --lr 1e-5 --epochs 3 \
-  --warmup-ratio 0.1 --newline-marker "[NL]" --seed 42
-python -m experiments.distilbert_train --lr 3e-5 --epochs 4 --newline-marker "[NL]" --seed 42   # DistilBERT
-
-# learning curve: add --train-size N (500, 1000, 2000, 4000, 5000) and --no-checkpoint
-# line-break stress test on a saved checkpoint
-python -m experiments.format_stress --checkpoints checkpoints/deberta/<run>
-# pseudo-labeling from unlabeled.csv, then retrain with the confident labels added
-python -m experiments.pseudo_label --name large8k --checkpoints checkpoints/deberta/<run>
-python -m experiments.distilbert_train <same flags> --extra-train results/pseudo/large8k.csv
-# report figures from the recorded results
-python -m experiments.report_figures
-```
-
-Main validation results (seed 42, AUROC on the 2,000 validation rows):
-
-| Model | Settings | Val AUROC |
-|---|---|---|
-| DistilBERT (uncased) | lr 3e-5, 4 epochs | 0.99114 |
-| DistilBERT + `[NL]` | lr 3e-5, 4 epochs | 0.99889 |
-| ELECTRA-large + `[NL]` | lr 1e-5, 3 epochs, warmup 0.1 | 0.99789 |
-| RoBERTa-large + `[NL]` | lr 1e-5, 3 epochs, warmup 0.1 | 0.99903 |
-| DeBERTa-v3-large, no `[NL]` | lr 1e-5, 3 epochs, warmup 0.1 | 0.99763 |
-| DeBERTa-v3-large + `[NL]` | lr 1e-5, 3 epochs, warmup 0.1 | 0.99982 |
-| DeBERTa-v3-large + `[NL]` + layout aug 0.5 (final) | lr 1e-5, 3 epochs, warmup 0.1 | 0.99942 |
-
-The final model scores a little lower on validation than the model without augmentation, but it is much more robust to line layout. When validation texts are reformatted into short lines, the model without augmentation calls 821 of 1,000 AI texts human; the final model calls 19. On Kaggle it also scored 0.99166, compared with 0.98460 without augmentation.
-
 ## Seeds and configuration
 
 - **Split:** seed 42 (`splits/split_seed42.json`).
@@ -185,6 +144,66 @@ All weights come from Hugging Face. We fine-tuned them only on `train.csv`, and 
 | `distilbert-base-uncased`, `distilbert-base-cased` | Baseline and early experiments | Apache 2.0 |
 | `tiiuae/falcon-7b`, `tiiuae/falcon-7b-instruct` | Binoculars zero-shot baseline | Apache 2.0 |
 | `gpt2` (`openai-community/gpt2`) | Log-probability features in the logistic regression | MIT |
+
+## Transformer fine-tuning (Marcos) — final model
+
+Code: `src/classifiers/distilbert.py` (classifier for any Hugging Face encoder, despite the name), `src/layout.py`
+(line-layout augmentation), `experiments/distilbert_train.py` (one validation run), `experiments/distilbert_full.py`
+(final models on all 10k rows). Seed 42, same 8k/2k split as every other model.
+
+I started from DistilBERT and moved to larger pretrained encoders (RoBERTa-large, ELECTRA-large, DeBERTa-v3-base,
+-large and v2-xlarge), each fine-tuned end to end with a 2-way classification head. The final submission comes from
+this track: DeBERTa-v3-large with the `[NL]` token and layout augmentation, as described in [Final approach](#final-approach).
+Reproduction is in [Reproducing the final submission](#reproducing-the-final-submission), and seeds in [Seeds and configuration](#seeds-and-configuration).
+
+### Fixed settings
+
+- AdamW, weight decay 0.01, linear decay, gradient-norm clip 1.0. Large models also warm up linearly over the first 10% of steps; DistilBERT has no warmup.
+- Batch size 16, max length 512 tokens, fp32 (bf16 only for DeBERTa-v2-xlarge).
+- Each validation run keeps the epoch with the best validation AUROC; final full-data runs keep the last epoch.
+
+### Commands
+
+Each run of `experiments.distilbert_train` writes:
+- `results/metrics/<run>.json`: config, seed, per-epoch losses and AUROC, train/val metrics.
+- One row in `results/distilbert_experiments.csv`.
+- Validation predictions in `results/predictions/` (git-ignored).
+
+```bash
+# final recipe on the validation split (val AUROC 0.99942)
+python -m experiments.distilbert_train --model-name microsoft/deberta-v3-large --lr 1e-5 --epochs 3 \
+  --warmup-ratio 0.1 --newline-marker "[NL]" --layout-aug 0.5 --seed 42
+
+# model comparison (same settings without augmentation; swap the model name)
+python -m experiments.distilbert_train --model-name microsoft/deberta-v3-large --lr 1e-5 --epochs 3 \
+  --warmup-ratio 0.1 --newline-marker "[NL]" --seed 42
+python -m experiments.distilbert_train --lr 3e-5 --epochs 4 --newline-marker "[NL]" --seed 42   # DistilBERT
+
+# learning curve: add --train-size N (500, 1000, 2000, 4000, 5000) and --no-checkpoint
+# line-break stress test on a saved checkpoint
+python -m experiments.format_stress --checkpoints checkpoints/deberta/<run>
+# pseudo-labeling from unlabeled.csv, then retrain with the confident labels added
+python -m experiments.pseudo_label --name large8k --checkpoints checkpoints/deberta/<run>
+python -m experiments.distilbert_train <same flags> --extra-train results/pseudo/large8k.csv
+# report figures from the recorded results
+python -m experiments.report_figures
+```
+
+### Results
+
+Seed 42, AUROC on the 2,000 validation rows:
+
+| Model | Settings | Val AUROC |
+|---|---|---|
+| DistilBERT (uncased) | lr 3e-5, 4 epochs | 0.99114 |
+| DistilBERT + `[NL]` | lr 3e-5, 4 epochs | 0.99889 |
+| ELECTRA-large + `[NL]` | lr 1e-5, 3 epochs, warmup 0.1 | 0.99789 |
+| RoBERTa-large + `[NL]` | lr 1e-5, 3 epochs, warmup 0.1 | 0.99903 |
+| DeBERTa-v3-large, no `[NL]` | lr 1e-5, 3 epochs, warmup 0.1 | 0.99763 |
+| DeBERTa-v3-large + `[NL]` | lr 1e-5, 3 epochs, warmup 0.1 | 0.99982 |
+| DeBERTa-v3-large + `[NL]` + layout aug 0.5 (final) | lr 1e-5, 3 epochs, warmup 0.1 | 0.99942 |
+
+The final model scores a little lower on validation than the model without augmentation, but it is much more robust to line layout. When validation texts are reformatted into short lines, the model without augmentation calls 821 of 1,000 AI texts human; the final model calls 19. On Kaggle it also scored 0.99166, compared with 0.98460 without augmentation.
 
 ## Logistic regression (Joshua)
 
