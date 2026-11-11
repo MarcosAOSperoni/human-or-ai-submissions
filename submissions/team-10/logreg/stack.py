@@ -1,6 +1,6 @@
 """Stacked logreg: one logreg per block + a meta logreg, words C swept, then a test submission.
 
-Run from submissions/group-number-10/:
+Run from submissions/team-10/:
     python -m logreg.stack
 
 Test-like validation: val comes from the same pool as train, so it can't see the train -> test

@@ -1,6 +1,6 @@
 """Which feature blocks help? One logreg per combo of blocks, C picked by 5-fold CV on train.
 
-Run from submissions/group-number-10/:
+Run from submissions/team-10/:
     python -m logreg.ablation
 
 Writes:
