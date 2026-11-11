@@ -126,7 +126,9 @@ Tests use synthetic data and tiny random models on CPU. `tests/test_real_data.py
 ## Data rules we followed
 
 - The final model sees `test.csv` only to predict it: no training, pseudo-labels or tuning on it. We never tried to recover test labels.
-- The logistic regression builds its TF-IDF vocabulary from train, `unlabeled.csv` and `test.csv` text, with no labels. See its section below.
+- The logistic regression (not the final submission) uses `test.csv` text, never labels, in two ways:
+  - It builds its TF-IDF vocabulary from train, `unlabeled.csv` and `test.csv` text.
+  - It chooses the word-feature `C` by AUROC on the 500 validation passages that look most like test. A train-vs-test text classifier picks those passages.
 - No external labeled data was used, and no LLM API labeled or predicted any passage.
 - Validation rows never entered training in validation experiments.
 
